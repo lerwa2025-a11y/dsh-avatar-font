@@ -130,8 +130,14 @@ console.log('\n[6] 覆盖层不动其他功能');
 console.log('\n[7] 用户消息也要跟着正文字体走');
 {
   const css = render({ ...base, bodyFont: SONG });
-  check('有用户气泡的覆盖规则', css.includes('bubble'));
-  check('该规则限定在 data-cav-row 内', css.includes('[data-cav-row]'));
+  check('有用户消息的覆盖规则', css.includes('data-chat-flow-kind="user"'));
+  check('也覆盖 steering（同属你自己发的）', css.includes('data-chat-flow-kind="steering"'));
+  /*
+   * v2.0：这条规则原来挂在 [data-cav-row] 上 —— 那是插件自己打的标记，
+   * 只有「头像」开着时才存在。字体现在归「字体」开关管，必须与头像解耦，
+   * 所以改用宿主原生的 data-chat-flow-kind。
+   */
+  check('该规则不依赖 data-cav-row（关头像后仍生效）', !css.includes('data-cav-row'));
 }
 
 console.log('\n[8] 设置项端到端');

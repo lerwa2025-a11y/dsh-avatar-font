@@ -1,4 +1,4 @@
-# dsh-conversation-avatar — 挂载声明
+# dsh-avatar-font — 挂载声明
 - insert:
-    - id: dsh-conversation-avatar
-      name: 'dsh-conversation-avatar'
+    - id: dsh-avatar-font
+      name: 'dsh-avatar-font'

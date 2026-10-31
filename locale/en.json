@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "Avatar & Bubbles",
-    "description": "Per-message avatars for both sides of the conversation (chat-app style layout), a bubble frame for AI replies, avatars that either follow the scroll or stay pinned to the start of their message, and a sticky offset that clears themed status bars. Ported from the wallpaper engine plugin's avatar extension."
+    "title": "Avatar & Font",
+    "description": "Per-message avatars for both sides of the conversation (chat-app style layout) with importable images, adjustable size and corner radius, and follow-the-scroll behavior; plus UI and code fonts, separate body and heading font sizes, line height, weight and text color. Both features toggle independently, so turning one off never affects the other."
   }
 }

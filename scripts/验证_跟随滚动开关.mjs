@@ -71,22 +71,25 @@ console.log('\n[4] 切开关立刻生效，不等下一次滚动');
 
 console.log('\n[5] 面板：控件在，且跟随关闭时吸顶滑杆置灰');
 {
-  check('面板有「头像跟随画面」这一行', client.includes('头像跟随画面'))
+  check('面板有「跟随画面」这一行', client.includes("label: '跟随画面'"))
   check('文案说清关掉的效果', client.includes('关掉后头像只固定在消息开头，不再跟着滑动'))
   check('开关写回 plugin.stickFollow',
     client.includes('saveSettings({ plugin: { ...st.plugin, stickFollow: v } })'))
   check('吸顶滑杆在关闭时 disabled', client.includes('disabled: !stickFollowOf()'))
   check('关闭时提示先开跟随',
-    client.includes('先打开「头像跟随画面」才有效'))
+    client.includes('先打开「跟随画面」才有效'))
   check('吸顶滑杆原本的说明没被删（开着时仍显示）',
     client.includes('翻页时下滑几个身位，避开主题状态栏'))
   check('置灰滑杆有视觉样式', client.includes('.cav-range:disabled'))
+  check('跟随控件归「头像」开关管（aOn 条件渲染）',
+    /aOn \? react\.createElement\(Row, \{ label: '跟随画面'/.test(client))
 }
 
-console.log('\n[6] 版本号 1.0.0');
+console.log('\n[6] 版本号 2.x');
 {
-  check('package.json version = 1.0.0', pkg.version === '1.0.0')
-  check('不是 0.x 了', !/^0\./.test(pkg.version))
+  const [major] = pkg.version.split('.').map(Number)
+  check('package.json version >= 2.0.0', major >= 2, pkg.version)
+  check('包名已是 dsh-avatar-font', pkg.name === 'dsh-avatar-font', pkg.name)
 }
 
 console.log('\n[7] 未破坏既有功能');
@@ -96,10 +99,10 @@ console.log('\n[7] 未破坏既有功能');
   check('吸顶下移净化仍在', index.includes('stickOffset: clampNum'))
   check('STICK_TOP 常量仍在', client.includes('const STICK_TOP'))
   check('findScroller 仍在', client.includes('function findScroller'))
-  check('气泡框逻辑没动', client.includes('const BUBBLE_CLASS'))
   check('字体覆盖层没动', client.includes('syncFontStyle'))
   check('思考行保护没动', client.includes('isProcessRow'))
-  check('总开关仍在', client.includes('st.plugin.enabled'))
+  check('气泡框已彻底移除', !client.includes('BUBBLE_CLASS'))
+  check('总开关已去掉', !client.includes('st.plugin.enabled'))
 }
 
 console.log('\n[8] 安全性：没有把用户值直接拼进 CSS');

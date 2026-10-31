@@ -1,9 +1,10 @@
 /**
- * 验证「用户消息字色」功能（v0.2.5）。
+ * 验证「用户消息字色」功能。
  *
  * 重点防两件事：
  *   ① 只作用于 user 侧的行，不误伤 AI 回复
  *   ② 头像绝不被命中（2026-10-25 被这个坑坏过一次）
+ *   ③ v2.0：字色归「字体」开关管，关掉头像后仍然生效
  *
  * 用法：node 验证_用户字色.mjs
  */
@@ -23,7 +24,6 @@ function stylesBlock(text) {
   const from = text.indexOf('`', start) + 1;
   const end = text.indexOf('\n`;', from);
   return text.slice(from, end)
-    .replace(/\$\{BUBBLE_CLASS\}/g, 'cav-bubbled')
     .replace(/\$\{AVATAR_NODE_CLASS\}/g, 'cav-avatar')
     .replace(/\$\{AVATAR_ATTR\}/g, 'data-cav-on')
     .replace(/\$\{AVATAR_ROW_ATTR\}/g, 'data-cav-row')
@@ -55,8 +55,8 @@ console.log('\n[1] 用户字色只作用于 user 侧');
 {
   const userRules = rules.filter((r) => r.body.includes('--cav-user-text-color'));
   check('存在使用 --cav-user-text-color 的规则', userRules.length > 0);
-  check('所有用户字色规则都限定 data-cav-row="user"',
-    userRules.every((r) => r.sel.includes('data-cav-row="user"')),
+  check('所有用户字色规则都限定 user / steering',
+    userRules.every((r) => /data-chat-flow-kind="(user|steering)"/.test(r.sel)),
     userRules.map((r) => r.sel).join(' | '));
 
   // 反过来：AI 规则不能引用用户变量，避免串色
@@ -71,7 +71,9 @@ console.log('\n[1] 用户字色只作用于 user 侧');
 
 console.log('\n[2] 头像绝不被用户字色命中（上次的事故）');
 {
-  const userWildcard = rules.find((r) => r.sel.includes('data-cav-row="user"') && r.sel.includes('*:not('));
+  const userWildcard = rules.find(
+    (r) => /data-chat-flow-kind="(user|steering)"/.test(r.sel) && r.sel.includes('*:not('),
+  );
   check('用户侧也有后代通配规则', Boolean(userWildcard));
   check('排除清单含 .cav-avatar（含后代）',
     Boolean(userWildcard) && /\.cav-avatar \*/.test(userWildcard.sel),
@@ -86,7 +88,9 @@ console.log('\n[2] 头像绝不被用户字色命中（上次的事故）');
 
 console.log('\n[3] 用户侧也排除代码（用户消息里可能有行内代码）');
 {
-  const userWildcard = rules.find((r) => r.sel.includes('data-cav-row="user"') && r.sel.includes('*:not('));
+  const userWildcard = rules.find(
+    (r) => /data-chat-flow-kind="(user|steering)"/.test(r.sel) && r.sel.includes('*:not('),
+  );
   const sel = userWildcard ? userWildcard.sel : '';
   check('排除 pre 及其后代', /pre, pre \*/.test(sel));
   check('排除 code 及其后代', /code, code \*/.test(sel));
@@ -111,17 +115,23 @@ console.log('\n[5] 设置项端到端');
   check('面板有「我的消息字色」这一项', src.includes('我的消息字色'));
   check('面板有跟随主题按钮', src.includes("saveSettings({ userTextColor: '' })"));
   check('写入 DOM 变量', src.includes("applyColorVar(b, '--cav-user-text-color'"));
-  check('关闭插件时清理变量', src.includes("removeProperty('--cav-user-text-color')"));
 }
 
-console.log('\n[6] 不破坏已有功能');
+console.log('\n[6] 字色归「字体」开关管（v2.0）');
 {
-  const bubble = rules.find((r) => r.sel === '.cav-bubbled');
-  check('气泡主规则仍无 width 类属性（上次事故）',
-    Boolean(bubble) && !/(max-width|min-width|(^|[\s;])width\s*:)/.test(bubble.body));
-  check('气泡层叠仍正确', /cav-bubbled::before\s*\{[^}]*z-index:\s*-1/.test(decls));
-  check('磨砂仍在', /backdrop-filter:\s*blur\(/.test(decls));
+  check('字体分支写入 --cav-user-text-color', /fOn[\s\S]{0,900}--cav-user-text-color/.test(src));
+  check('字体关闭时移除 --cav-user-text-color',
+    /else \{[\s\S]{0,300}removeProperty\('--cav-user-text-color'\)/.test(src));
+  check('stopLayer 不撤字色变量（关头像不影响字色）',
+    !/function stopLayer[\s\S]{0,1200}removeProperty\('--cav-user-text-color'\)/.test(src));
+}
+
+console.log('\n[7] 不破坏已有功能');
+{
   check('AI 字色规则仍在', rules.some((r) => r.body.includes('--cav-text-color')));
+  check('字色规则不依赖 data-cav-row',
+    rules.filter((r) => /--cav-(user-)?text-color/.test(r.body))
+      .every((r) => !r.sel.includes('data-cav-row')));
   // 头像尺寸唯一来源
   const sizeRules = rules.filter((r) => (
     /(^|[\s>])\.cav-avatar(\s*$|\s*[>{])/.test(r.sel + ' ') && /(^|[\s;])width\s*:/.test(r.body)

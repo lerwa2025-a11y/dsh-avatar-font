@@ -1,25 +1,41 @@
 /**
- * 用浏览器自带的 CSS 解析器校验气泡那段 CSS 是否真的能被解析。
- * 不连浏览器：用 Node 里的最小 DOM 跑不了 CSSOM，所以这里做一个
- * 「括号/引号配平 + 关键声明可解析」的结构检查，并列出所有气泡规则。
+ * CSS 结构自检（v2.0：气泡框已整体移除，这里只校验剩下的头像层 + 字色层）。
+ *
+ * 不连浏览器：用 Node 里做「括号/引号配平 + 关键声明存在 + 规则清单」的结构检查。
+ *
+ * 用法：node 验证_CSS结构.mjs
  */
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 
-const f = 'S:/Agent自定义目录/dsh-home/plugins-src/dsh-conversation-avatar/lib/client.js';
-const src = readFileSync(f, 'utf8');
+const here = dirname(fileURLToPath(import.meta.url));
+const src = readFileSync(join(here, '..', 'lib', 'client.js'), 'utf8');
 
-const start = src.indexOf('const STYLES = `');
-const from = src.indexOf('`', start) + 1;
-const end = src.indexOf('\n`;', from);
-let css = src.slice(from, end);
+function stylesBlock(text) {
+  const start = text.indexOf('const STYLES = `');
+  const from = text.indexOf('`', start) + 1;
+  const end = text.indexOf('\n`;', from);
+  return text.slice(from, end)
+    .replace(/\$\{AVATAR_NODE_CLASS\}/g, 'cav-avatar')
+    .replace(/\$\{AVATAR_ATTR\}/g, 'data-cav-on')
+    .replace(/\$\{AVATAR_ROW_ATTR\}/g, 'data-cav-row')
+    .replace(/\$\{VAR_SIZE\}/g, '--cav-size')
+    .replace(/\$\{VAR_ROUND\}/g, '--cav-round');
+}
+const css = stylesBlock(src);
+const decls = css.replace(/\/\*[\s\S]*?\*\//g, '');
 
-// 把 ${...} 模板占位替换成已知类名，便于分析
-css = css.replace(/\$\{BUBBLE_CLASS\}/g, 'cav-bubbled')
-         .replace(/\$\{AVATAR_NODE_CLASS\}/g, 'cav-avatar')
-         .replace(/\$\{AVATAR_ATTR\}/g, 'data-cav-on')
-         .replace(/\$\{AVATAR_ROW_ATTR\}/g, 'data-cav-row')
-         .replace(/\$\{VAR_SIZE\}/g, '--cav-size')
-         .replace(/\$\{VAR_ROUND\}/g, '--cav-round');
+function parseRules(text) {
+  const out = [];
+  const re = /([^{}]+)\{([^{}]*)\}/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    out.push({ sel: m[1].trim().replace(/\s+/g, ' '), body: m[2].trim() });
+  }
+  return out;
+}
+const rules = parseRules(decls);
 
 let pass = 0;
 let fail = 0;
@@ -37,109 +53,68 @@ console.log('\n[A] 结构配平');
   const parenClose = (css.match(/\)/g) ?? []).length;
   check(`圆括号配平（( ${parenOpen} / ) ${parenClose}）`, parenOpen === parenClose);
   check('没有未闭合的注释', (css.match(/\/\*/g) ?? []).length === (css.match(/\*\//g) ?? []).length);
+  check('没有残留的模板占位符（${...}）', !css.includes('${'));
 }
 
-console.log('\n[B] 气泡相关规则全文');
+console.log('\n[B] 规则清单');
 {
-  // 抽出所有含 cav-bubbled 的规则块
-  const blocks = [];
-  const re = /([^{}]*cav-bubbled[^{}]*)\{([^{}]*)\}/g;
-  let m;
-  while ((m = re.exec(css)) !== null) blocks.push({ sel: m[1].trim(), body: m[2].trim() });
-  console.log(`  共 ${blocks.length} 条规则：`);
-  for (const b of blocks) {
-    console.log(`  · ${b.sel}`);
-    for (const decl of b.body.split(';').map((s) => s.trim()).filter(Boolean)) {
-      console.log(`      ${decl}`);
-    }
-  }
-  /*
-   * 条数只做「别太多别太少」的粗筛，不是精确断言。
-   * v0.3.3 加了一组「防溢出」兜底规则（子元素限宽、媒体限宽、表格压回 100%），
-   * 条数从 6 涨到 10 是预期的，所以上限放宽到 14。
-   */
-  check('气泡规则数量在预期范围内（6–14 条）',
-    blocks.length >= 6 && blocks.length <= 14, String(blocks.length));
+  console.log(`  共 ${rules.length} 条规则`);
+  for (const r of rules) console.log(`  · ${r.sel}`);
+  // 41 条：8 头像 + 4 字色 + 29 面板控件。只做粗筛，不是精确断言。
+  check('规则数量在预期范围内（35–50 条）', rules.length >= 35 && rules.length <= 50, String(rules.length));
+  check('没有空选择器的规则', rules.every((r) => r.sel.length > 0));
+  check('没有空规则体', rules.every((r) => r.body.length > 0));
 }
 
-console.log('\n[C] 关键声明逐条存在');
-{
-  const findBlock = (sel) => {
-    const re = new RegExp(sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*\\{([^{}]*)\\}');
-    const m = css.match(re);
-    return m ? m[1] : '';
-  };
-  const main = findBlock('.cav-bubbled');
-  const before = findBlock('.cav-bubbled::before');
-  const after = findBlock('.cav-bubbled::after');
-
-  check('主规则有 position: relative', /position:\s*relative/.test(main));
-  check('主规则有 isolation: isolate', /isolation:\s*isolate/.test(main));
-  check('主规则不包含 backdrop-filter', !/backdrop-filter/.test(main));
-  check('主规则不包含 overflow: hidden', !/overflow/.test(main));
-
-  check('::before 有 z-index: -1', /z-index:\s*-1/.test(before));
-  check('::before 有 inset: 0', /inset:\s*0/.test(before));
-  check('::before 有 pointer-events: none', /pointer-events:\s*none/.test(before));
-  check('::before 有 blur 磨砂', /backdrop-filter:\s*blur\(/.test(before));
-  check('::before 有 -webkit- 前缀', /-webkit-backdrop-filter/.test(before));
-
-  check('::after 有 z-index: -1（不压文字）', /z-index:\s*-1/.test(after));
-  check('::after 有 pointer-events: none', /pointer-events:\s*none/.test(after));
-}
-
-console.log('\n[D] color-mix 表达式可解析');
+console.log('\n[C] 气泡框已彻底移除');
 {
   /*
-   * 按「从 color-mix( 起数括号」的方式逐个配平，不能用正则截取
-   * —— 这些声明是多行的，正则会在换行处把括号截断（这个误报踩过一次）。
+   * v2.0 用户明确要求「去掉气泡框功能，就要最干净」。
+   * 连带着为气泡服务的超宽内容约束（md-table-wide 归位、子元素限宽、
+   * 会滚的块、媒体限宽、长词断行）也一并删掉 —— 它们全部挂在 .cav-bubbled 下，
+   * 气泡没了就是死代码。这条断言防止以后有人「顺手」把它们加回来。
    */
-  const mixes = [];
-  let i = -1;
-  while ((i = css.indexOf('color-mix(', i + 1)) !== -1) {
-    let depth = 0;
-    for (let j = i + 'color-mix'.length; j < css.length; j += 1) {
-      if (css[j] === '(') depth += 1;
-      else if (css[j] === ')') {
-        depth -= 1;
-        if (depth === 0) { mixes.push(css.slice(i, j + 1)); break; }
-      }
-    }
-  }
-  console.log(`  共 ${mixes.length} 处 color-mix`);
-  let bad = 0;
-  for (const mix of mixes) {
-    const opens = (mix.match(/\(/g) ?? []).length;
-    const closes = (mix.match(/\)/g) ?? []).length;
-    if (opens !== closes) { bad += 1; console.log(`    ✗ 配平失败: ${mix.slice(0, 90)}`); }
-  }
-  check('所有 color-mix 括号配平', bad === 0 && mixes.length > 0, `${bad} 处异常 / 共 ${mixes.length} 处`);
-  check('alpha 用 calc(var(...) * 1%) 形式', /calc\(var\(--cav-bubble-alpha[^)]*\)\s*\*\s*1%\)/.test(css));
+  check('没有 .cav-bubbled 规则', !decls.includes('cav-bubbled'));
+  check('没有 --cav-bubble-* 变量', !decls.includes('--cav-bubble'));
+  check('没有 backdrop-filter（磨砂随气泡一起删了）', !decls.includes('backdrop-filter'));
+  check('没有 md-table-wide 归位规则', !decls.includes('md-table-wide'));
+  check('没有 overflow-wrap: anywhere', !decls.includes('overflow-wrap'));
+  check('没有 isolation: isolate', !decls.includes('isolation'));
+  check('源码里没有 BUBBLE_CLASS 常量', !src.includes('BUBBLE_CLASS'));
+  check('源码里没有 syncBubbles', !src.includes('syncBubbles'));
 }
 
-console.log('\n[E] 没有残留会导致文字被盖的旧规则');
+console.log('\n[D] 头像层规则齐全');
 {
-  // 先剥掉注释再判断，否则注释里那句「旧规则 .cav-bubbled > * 已删除」会被误判
-  const decls = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const rowRule = rules.find((r) => r.sel === 'body[data-cav-on="on"] [data-cav-row]');
+  check('行改成 flex', Boolean(rowRule) && /display:\s*flex/.test(rowRule.body));
+  check('行内间距 8px', Boolean(rowRule) && /gap:\s*8px/.test(rowRule.body));
 
-  /*
-   * 这里真正要防的是历史上那条「把直接子元素抬到 z-index:1」的旧规则 ——
-   * 它只保护直接子元素，深层文字仍会被背景层盖住（v0.2.x 的重大 bug）。
-   *
-   * ⚠️ 2026-10-25 修：旧断言是「只要存在 .cav-bubbled > * 规则就失败」，
-   *    太粗。v0.3.3 起有意加了 `.cav-bubbled > * { max-width:100%; min-width:0 }`
-   *    用于防止内容撑破气泡，这是**宽度**约束，与层叠无关，不该被判为残留。
-   *    正确判据：这条规则里不得出现 position / z-index。
-   */
-  const childRules = [...decls.matchAll(/\.cav-bubbled\s*>\s*\*\s*\{([^}]*)\}/g)]
-    .map((m) => m[1]);
-  check('不存在「抬 z-index」的 .cav-bubbled > * 规则',
-    childRules.every((b) => !/position|z-index/.test(b)),
-    childRules.join(' | '));
-  check('若存在 .cav-bubbled > * 规则，它只做宽度约束',
-    childRules.length === 0 || childRules.every((b) => /max-width|min-width/.test(b)),
-    childRules.join(' | '));
-  check('不存在 z-index: 0 的气泡背景', !/cav-bubbled::before\s*\{[^}]*z-index:\s*0/.test(decls));
+  const userRow = rules.find((r) => r.sel === 'body[data-cav-on="on"] [data-cav-row="user"]');
+  check('用户行反向（消息在右）', Boolean(userRow) && /row-reverse/.test(userRow.body));
+
+  const avatar = rules.find((r) => r.sel === '.cav-avatar');
+  check('头像本体规则在', Boolean(avatar));
+  check('头像宽高都走 var(--cav-size)', Boolean(avatar)
+    && /width:\s*var\(--cav-size/.test(avatar.body)
+    && /height:\s*var\(--cav-size/.test(avatar.body));
+  check('头像用 position: relative（跟随滚动要写 style.top）',
+    Boolean(avatar) && /position:\s*relative/.test(avatar.body));
+}
+
+console.log('\n[E] 字色层规则齐全');
+{
+  const aiRule = rules.find((r) => r.sel.includes('data-chat-flow-kind="assistant-step"') && r.sel.includes('*:not('));
+  check('AI 侧有后代通配字色规则', Boolean(aiRule));
+  check('AI 侧用 --cav-text-color', Boolean(aiRule) && aiRule.body.includes('--cav-text-color'));
+
+  const userRule = rules.find((r) => r.sel.includes('data-chat-flow-kind="user"') && r.sel.includes('*:not('));
+  check('用户侧有后代通配字色规则', Boolean(userRule));
+  check('用户侧用 --cav-user-text-color', Boolean(userRule) && userRule.body.includes('--cav-user-text-color'));
+
+  // 字色必须与头像层解耦：不能依赖本插件自己打的 data-cav-row 标记
+  check('字色规则不依赖 data-cav-row（关头像后仍生效）',
+    [aiRule, userRule].every((r) => Boolean(r) && !r.sel.includes('data-cav-row')));
 }
 
 console.log(`\n结果：通过 ${pass}，失败 ${fail}\n`);

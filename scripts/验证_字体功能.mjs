@@ -39,6 +39,12 @@ function sliceFunction(name, text) {
 const buildCss = sliceFunction('buildFontCss', src);
 const syncFn = sliceFunction('syncFontStyle', src);
 
+/** 去注释后的源码，用于「某字符串不该出现」这类断言（避免注释里解释性的提及造成误报）。 */
+const codeOnly = (text) => text
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .replace(/^\s*\/\/.*$/gm, '')
+  .replace(/(^|[^:])\/\/.*$/gm, '$1');
+
 let pass = 0;
 let fail = 0;
 const check = (label, ok, detail = '') => {
@@ -177,7 +183,6 @@ console.log('\n[9] 不破坏前面修好的东西');
      * —— 这个坑踩过一次（头像宽度检查因此误报）。
      */
     return text.slice(from, end)
-      .replace(/\$\{BUBBLE_CLASS\}/g, 'cav-bubbled')
       .replace(/\$\{AVATAR_NODE_CLASS\}/g, 'cav-avatar')
       .replace(/\$\{AVATAR_ATTR\}/g, 'data-cav-on')
       .replace(/\$\{AVATAR_ROW_ATTR\}/g, 'data-cav-row')
@@ -185,11 +190,8 @@ console.log('\n[9] 不破坏前面修好的东西');
       .replace(/\$\{VAR_ROUND\}/g, '--cav-round');
   }
   const css = stylesBlock(src).replace(/\/\*[\s\S]*?\*\//g, '');
-  check('气泡主规则仍无 width 类属性',
-    !/\.cav-bubbled\s*\{[^}]*max-width/.test(css) && !/\.cav-bubbled\s*\{[^}]*min-width/.test(css));
-  check('气泡层叠仍正确', /::before\s*\{[^}]*z-index:\s*-1/.test(css));
-  check('磨砂仍在', /backdrop-filter:\s*blur\(/.test(css));
   check('两个字色变量都还在', css.includes('--cav-text-color') && css.includes('--cav-user-text-color'));
+  check('气泡框已彻底移除', !css.includes('cav-bubbled') && !src.includes('BUBBLE_CLASS'));
   check('头像尺寸仍只有一个来源', (() => {
     const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)];
     /*
@@ -203,6 +205,15 @@ console.log('\n[9] 不破坏前面修好的东西');
     });
     return body.length === 1;
   })());
+}
+
+console.log('\n[10] 字体归「字体」开关管（v2.0）');
+{
+  check('字体开关取值函数 fontOn 存在', src.includes('const fontOn ='));
+  check('缺省视为开（!== false）', /fontOn = \(\) => settings\.plugin\?\.font !== false/.test(src));
+  check('开时调用 syncFontStyle', /if \(fOn\) \{[\s\S]{0,120}syncFontStyle\(\)/.test(src));
+  check('关时调用 clearFontStyle', /else \{[\s\S]{0,120}clearFontStyle\(\)/.test(src));
+  check('字体不再依赖头像开关', !/plugin\.enabled/.test(codeOnly(src)));
 }
 
 console.log(`\n结果：通过 ${pass}，失败 ${fail}\n`);

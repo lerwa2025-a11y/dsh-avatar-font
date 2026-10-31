@@ -1,7 +1,7 @@
 {
-  "name": "dsh-conversation-avatar",
-  "version": "1.0.0",
-  "description": "头像和气泡框：给会话双方各配一张头像，消息左右分列（像好友聊天），可导入图片、调大小与圆角，并给 AI 回复加气泡框；头像可跟随滚动或只固定在消息开头。从壁纸引擎插件的「自定义会话头像」扩展移植而来，只保留头像扩展本身。",
+  "name": "dsh-avatar-font",
+  "version": "2.0.0",
+  "description": "头像和字体：给会话双方各配一张头像，消息左右分列（像好友聊天），可导入图片、调大小与圆角、跟随滚动；同时可换界面字体与代码字体、调正文与标题字号、行距、加粗、字色。两个功能各自独立启停。",
   "type": "module",
   "license": "MIT",
   "author": "lerwa",
@@ -10,11 +10,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/lerwa2025-a11y/dsh-conversation-avatar.git"
+    "url": "git+https://github.com/lerwa2025-a11y/dsh-avatar-font.git"
   },
-  "homepage": "https://github.com/lerwa2025-a11y/dsh-conversation-avatar#readme",
+  "homepage": "https://github.com/lerwa2025-a11y/dsh-avatar-font#readme",
   "bugs": {
-    "url": "https://github.com/lerwa2025-a11y/dsh-conversation-avatar/issues"
+    "url": "https://github.com/lerwa2025-a11y/dsh-avatar-font/issues"
   },
   "keywords": [
     "dsh",
@@ -23,7 +23,7 @@
     "deepseek",
     "cordis",
     "avatar",
-    "bubble",
+    "font",
     "chat-ui"
   ],
   "main": "./lib/index.js",
